@@ -6,11 +6,10 @@ $db = Database::getInstance();
 // --- ADD TO CART ---
 if (isset($_POST['add_to_cart'])) {
     $db->addToCart(
-        $_POST['id'],
-        $_POST['name'] ?? '',
-        $_POST['price'] ?? 0,
-        $_POST['image'] ?? '',
-        $_POST['qty'] ?? 1
+        $_POST['perfume_id'],
+        $_POST['perfume_name'] ?? '',
+        $_POST['perfume_price'] ?? 0,
+        $_POST['perfume_quantity'] ?? 1
     );
 
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
@@ -21,7 +20,7 @@ if (isset($_POST['add_to_cart'])) {
 
 // --- UPDATE QUANTITY ---
 if (isset($_POST['update_qty'])) {
-    $db->updateCartQuantity($_POST['id'], $_POST['quantity']);
+    $db->updateCartQuantity($_POST['perfume_id'], $_POST['perfume_quantity']);
     header("Location: cart.php");
     exit;
 }
@@ -67,7 +66,6 @@ $cart = $db->getCart();
     <?php if (!empty($_SESSION['cart'])): ?>
     <table>
         <tr>
-            <th>Image</th>
             <th>Perfume</th>
             <th>Price</th>
             <th>Qty</th>
@@ -77,17 +75,16 @@ $cart = $db->getCart();
         <?php 
         $grand_total = 0;
         foreach ($_SESSION['cart'] as $id => $item): 
-            $total = $item['price'] * $item['quantity'];
+            $total = $item['perfume_price'] * $item['perfume_quantity'];
             $grand_total += $total;
         ?>
         <tr>
-            <td><img src="<?= htmlspecialchars($item['image']) ?>" alt="<?= htmlspecialchars($item['name']) ?>"></td>
-            <td><?= htmlspecialchars($item['name']) ?></td>
-            <td>₱<?= number_format($item['price'], 2) ?></td>
+            <td><?= htmlspecialchars($item['perfume_name']) ?></td>
+            <td>₱<?= number_format($item['perfume_price'], 2) ?></td>
             <td>
                 <form method="post" style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                    <input type="hidden" name="id" value="<?= htmlspecialchars($id) ?>">
-                    <input type="number" name="quantity" value="<?= (int)$item['quantity'] ?>" min="1" step="1" class="qty-input">
+                    <input type="hidden" name="perfume_id" value="<?= htmlspecialchars($id) ?>">
+                    <input type="number" name="perfume_quantity" value="<?= (int)$item['perfume_quantity'] ?>" min="1" step="1" class="qty-input">
                     <button type="submit" name="update_qty" class="update-btn">Update</button>
                 </form>
             </td>

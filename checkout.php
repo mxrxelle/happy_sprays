@@ -21,9 +21,9 @@ $user_data = [];
 if ($db->isLoggedIn()) {
     // You can extend this to get user details from database
     $user_data = [
-        'name' => $_SESSION['customer_name'] ?? '',
-        'email' => $_SESSION['customer_email'] ?? ''
-    ];
+        'customer_firstname' => $_SESSION['customer_firstname'] ?? '',
+        'customer_lastname' => $_SESSION['customer_lastname'] ?? '',
+        'customer_email' => $_SESSION['customer_email'] ?? '',    ];
 }
 ?>
 <!DOCTYPE html>
@@ -226,11 +226,11 @@ if ($db->isLoggedIn()) {
             }
             
             // Additional client-side validation
-            let requiredFields = ['name', 'email', 'street', 'city', 'province', 'postal'];
+            let requiredFields = ['customer_firstname', 'customer_lastname', 'customer_email', 'street', 'barangay', 'city', 'province', 'postal_code'];
             for (let field of requiredFields) {
                 let element = document.getElementById(field);
                 if (!element.value.trim()) {
-                    alert(`Please fill in ${field.charAt(0).toUpperCase() + field.slice(1)}`);
+                    alert(`Please fill in ${field.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}`);
                     element.focus();
                     return false;
                 }
@@ -271,29 +271,41 @@ if ($db->isLoggedIn()) {
             </div>
             
             <form action="place_order.php" method="POST" enctype="multipart/form-data">
-                <label for="name">Full Name <span class="required">*</span></label>
-                <input type="text" id="name" name="name" value="<?= htmlspecialchars($user_data['name'] ?? '') ?>" required>
+                <label>First Name <span class="required">*</span></label>
+                <input type="text" id="customer_firstname" name="customer_firstname" 
+                       value="<?= htmlspecialchars($user_data['customer_firstname'] ?? '') ?>" required>
 
-                <label for="email">Email Address <span class="required">*</span></label>
-                <input type="email" id="email" name="email" value="<?= htmlspecialchars($user_data['email'] ?? '') ?>" required>
+                <label>Last Name <span class="required">*</span></label>
+                <input type="text" id="customer_lastname" name="customer_lastname" 
+                       value="<?= htmlspecialchars($user_data['customer_lastname'] ?? '') ?>" required>
 
-                <label for="phone">Phone Number</label>
+                <label>Email Address <span class="required">*</span></label>
+                <input type="email" id="customer_email" name="customer_email"
+                        value="<?= htmlspecialchars($user_data['customer_email'] ?? '') ?>" required>
+
+                <label>Phone Number</label>
                 <input type="tel" id="phone" name="phone" placeholder="09XXXXXXXXX">
 
-                <label for="street">Street / Barangay <span class="required">*</span></label>
+                <label>Street <span class="required">*</span></label>
                 <input type="text" id="street" name="street" required>
 
-                <label for="city">City / Municipality <span class="required">*</span></label>
+                <label>Barangay <span class="required">*</span></label>
+                <input type="text" id="barangay" name="barangay" required>
+
+                <label>City / Municipality <span class="required">*</span></label>
                 <input type="text" id="city" name="city" required>
 
-                <label for="province">Province <span class="required">*</span></label>
+                <label>Province <span class="required">*</span></label>
                 <input type="text" id="province" name="province" required>
 
-                <label for="postal">Postal Code <span class="required">*</span></label>
-                <input type="text" id="postal" name="postal" pattern="[0-9]{4}" placeholder="1234" required>
+                <label>Country <span class="required">*</span></label>
+                <input type="text" id="country" name="country" value="Philippines" required>
 
-                <label for="payment">Payment Method <span class="required">*</span></label>
-                <select id="payment" name="payment" required onchange="togglePaymentDetails()">
+                <label>Postal Code <span class="required">*</span></label>
+                <input type="text" id="postal_code" name="postal_code" pattern="[0-9]{4}" required>
+
+                <label>Payment Method <span class="required">*</span></label>
+                <select id="payment_method" name="payment_method" onchange="togglePaymentDetails()" required>
                     <option value="">-- Select Payment Method --</option>
                     <option value="cod">Cash on Delivery</option>
                     <option value="gcash">GCash</option>
@@ -331,7 +343,6 @@ if ($db->isLoggedIn()) {
             <table>
                 <thead>
                     <tr>
-                        <th>Image</th>
                         <th>Perfume</th>
                         <th>Qty</th>
                         <th>Total</th>
@@ -340,17 +351,12 @@ if ($db->isLoggedIn()) {
                 <tbody>
                     <?php foreach ($cart_items as $item): ?>
                     <tr>
-                        <td>
-                            <img src="images/<?= htmlspecialchars($item['image']) ?>" 
-                                 alt="<?= htmlspecialchars($item['name']) ?>" 
-                                 onerror="this.src='images/placeholder.jpg'">
-                        </td>
                         <td style="text-align: left;">
-                            <strong><?= htmlspecialchars($item['name']) ?></strong><br>
-                            <small>₱<?= number_format($item['price'], 2) ?> each</small>
+                            <strong><?= htmlspecialchars($item['perfume_name']) ?></strong><br>
+                            <small>₱<?= number_format($item['perfume_price'], 2) ?> each</small>
                         </td>
-                        <td><?= $item['quantity'] ?></td>
-                        <td><strong>₱<?= number_format($item['price'] * $item['quantity'], 2) ?></strong></td>
+                        <td><?= $item['perfume_quantity'] ?></td>
+                        <td><strong>₱<?= number_format($item['perfume_price'] * $item['perfume_quantity'], 2) ?></strong></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>

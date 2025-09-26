@@ -4,7 +4,7 @@ session_start();
 $count = 0;
 if(isset($_SESSION['cart'])){
     foreach($_SESSION['cart'] as $item){
-        $count += $item['quantity'];
+        $count += $item['perfume_quantity'];
     }
 }
 echo $count;

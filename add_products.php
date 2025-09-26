@@ -7,6 +7,8 @@ $editProduct = null;
 // Handle Add Product
 if (isset($_POST['submit'])) {
     $db->addProduct($_POST, $_FILES);
+    header("Location: add_products.php");
+    exit;
 }
 
 // Handle Edit (get product to edit)
@@ -50,40 +52,28 @@ if (isset($_POST['update'])) {
         <input type="text" name="name" value="<?= htmlspecialchars($editProduct['name']) ?>" required>
         <input type="text" name="brand" value="<?= htmlspecialchars($editProduct['brand']) ?>" required>
         <input type="number" step="0.01" name="price" value="<?= htmlspecialchars($editProduct['price']) ?>" required>
-        <input type="text" name="ml_size" value="<?= htmlspecialchars($editProduct['ml_size']) ?>" placeholder="Bottle Size (e.g. 50ml)">
-        <select name="gender" required>
-            <option value="Male" <?= $editProduct['gender']=='Male'?'selected':'' ?>>Male</option>
-            <option value="Female" <?= $editProduct['gender']=='Female'?'selected':'' ?>>Female</option>
-            <option value="Unisex" <?= $editProduct['gender']=='Unisex'?'selected':'' ?>>Unisex</option>
+        <select name="sex" required>
+            <option value="Male" <?= $editProduct['sex']=='Male'?'selected':'' ?>>Male</option>
+            <option value="Female" <?= $editProduct['sex']=='Female'?'selected':'' ?>>Female</option>
+            <option value="Unisex" <?= $editProduct['sex']=='Unisex'?'selected':'' ?>>Unisex</option>
         </select>
         <input type="number" name="stock" value="<?= htmlspecialchars($editProduct['stock']) ?>" required>
-        <textarea name="description"><?= htmlspecialchars($editProduct['description']) ?></textarea>
-        <label>Update Main Image:</label>
-        <input type="file" name="image">
-        <?php if($editProduct['image']): ?><img src="images/<?= htmlspecialchars($editProduct['image']) ?>" width="60"><?php endif; ?>
-        <label>Update Second Image (Optional):</label>
-        <input type="file" name="image2">
-        <?php if($editProduct['image2']): ?><img src="images/<?= htmlspecialchars($editProduct['image2']) ?>" width="60"><?php endif; ?>
+        <textarea name="perfume_desc"><?= htmlspecialchars($editProduct['perfume_desc']) ?></textarea>
         <button type="submit" name="update">Update Product</button>
     </form>
 <?php else: ?>
     <h2>Add New Product</h2>
     <form method="post" enctype="multipart/form-data">
-        <input type="text" name="name" placeholder="Product Name" required>
-        <input type="text" name="brand" placeholder="Inspired Scent" required>
+        <input type="text" name="perfume_name" placeholder="Product Name" required>
+        <input type="text" name="perfume_brand" placeholder="Inspired Scent" required>
         <input type="number" step="0.01" name="price" placeholder="Price" required>
-        <input type="text" name="ml_size" placeholder="Bottle Size (e.g. 50ml)">
-        <select name="gender" required>
+        <select name="sex" required>
             <option value="Male">Male</option>
             <option value="Female">Female</option>
             <option value="Unisex">Unisex</option>
         </select>
         <input type="number" name="stock" placeholder="Stock" required>
-        <textarea name="description" placeholder="Description"></textarea>
-        <label>Upload Main Image:</label>
-        <input type="file" name="image" required>
-        <label>Upload Second Image (Optional):</label>
-        <input type="file" name="image2">
+        <textarea name="perfume_desc" placeholder="Description"></textarea>
         <button type="submit" name="submit">Add Product</button>
     </form>
 <?php endif; ?>

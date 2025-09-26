@@ -108,9 +108,9 @@ class Database {
         }
     }
     public function getAllCustomers() {
-        return $this->select("SELECT customer_id, firstname, lastname, username, email, created_at 
+        return $this->select("SELECT customer_id, customer_firstname, customer_lastname, customer_username, customer_email, is_verified, cs_created_at 
                           FROM customers 
-                          ORDER BY created_at DESC");
+                          ORDER BY cs_created_at DESC");
     }
     // Helper method to delete a record safely by ID
     public function deleteById($table, $id) {
@@ -136,12 +136,12 @@ class Database {
     // =================================================================
 // CUSTOMER REGISTRATION
 // =================================================================
-public function registerCustomer($firstname, $lastname, $username, $email, $password) {
+public function registerCustomer($customer_firstname, $customer_lastname, $customer_username, $customer_email, $customer_password) {
     try {
         // Check duplicates (username OR email) in customers table
         $existing = $this->fetch(
-            "SELECT customer_id FROM customers WHERE username = ? OR email = ? LIMIT 1",
-            [$username, $email]
+            "SELECT customer_id FROM customers WHERE customer_username = ? OR customer_email = ? LIMIT 1",
+            [$customer_username, $customer_email]
         );
 
         if ($existing) {
@@ -149,13 +149,13 @@ public function registerCustomer($firstname, $lastname, $username, $email, $pass
         }
 
         // Hash password
-        $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
+        $hashedPassword = password_hash($customer_password, PASSWORD_BCRYPT);
 
         // Insert new customer
         $success = $this->insert(
-            "INSERT INTO customers (firstname, lastname, username, email, password, created_at) 
+            "INSERT INTO customers (customer_firstname, customer_lastname, customer_username, customer_email, customer_password, cs_created_at) 
              VALUES (?, ?, ?, ?, ?, NOW())",
-            [$firstname, $lastname, $username, $email, $hashedPassword]
+            [$customer_firstname, $customer_lastname, $customer_username, $customer_email, $hashedPassword]
         );
 
         return $success ? true : "Registration failed. Please try again.";
@@ -176,16 +176,16 @@ public function login($usernameOrEmail, $password) {
     try {
         // 1. Check in admins table
         $admin = $this->fetch(
-            "SELECT admin_id, username, password 
+            "SELECT admin_id, admin_username, admin_password 
              FROM admins 
-             WHERE username = ? 
+             WHERE admin_username = ? 
              LIMIT 1",
             [$usernameOrEmail]
         );
 
-        if ($admin && password_verify($password, $admin['password'])) {
-            $_SESSION['user_id'] = $admin['admin_id'];
-            $_SESSION['username'] = $admin['username'];
+        if ($admin && password_verify($password, $admin['admin_password'])) {
+            $_SESSION['admin_id'] = $admin['admin_id'];
+            $_SESSION['admin_username'] = $admin['admin_username'];
             $_SESSION['role'] = "admin";
 
             return [
@@ -197,18 +197,25 @@ public function login($usernameOrEmail, $password) {
 
         // 2. Check in customers table
         $customer = $this->fetch(
-            "SELECT customer_id, firstname, lastname, username, email, password
+            "SELECT customer_id, customer_firstname, customer_lastname, customer_username, customer_email, customer_password, is_verified
              FROM customers
-             WHERE username = ? OR email = ?
+             WHERE customer_username = ? OR customer_email = ?
              LIMIT 1",
             [$usernameOrEmail, $usernameOrEmail]
         );
 
-        if ($customer && password_verify($password, $customer['password'])) {
+        //verify
+        if ($customer && password_verify($password, $customer['customer_password'])) {
+            // Check if account is verified
+            if ($customer['is_verified'] == 0) {
+                return ["success" => false, "message" => "Please verify your account before logging in."];
+            }
+
+            // If everything is okay, log them in
             $_SESSION['customer_id'] = $customer['customer_id'];
-            $_SESSION['username'] = $customer['username'];
-            $_SESSION['customer_name'] = $customer['firstname'] . " " . $customer['lastname'];
-            $_SESSION['email'] = $customer['email'];
+            $_SESSION['customer_username'] = $customer['customer_username'];
+            $_SESSION['customer_name'] = $customer['customer_firstname'] . " " . $customer['customer_lastname'];
+            $_SESSION['customer_email'] = $customer['customer_email'];
             $_SESSION['role'] = "customer";
 
             return [
@@ -320,7 +327,7 @@ public function getAllOrders($orderBy = 'created_at DESC') {
 
 public function getOrderById($order_id) {
     try {
-        return $this->fetch("SELECT * FROM orders WHERE id = ? LIMIT 1", [$order_id]);
+        return $this->fetch("SELECT * FROM orders WHERE order_id = ? LIMIT 1", [$order_id]);
     } catch (Exception $e) {
         error_log("Get order by ID error: " . $e->getMessage());
         return null;
@@ -332,6 +339,8 @@ public function getOrderItems($order_id) {
         [$order_id]
     );
 }
+
+//marielle ayaw sumagot ng mga hayop
 public function updateOrderStatus($order_id, $status) {
     try {
         // Validate status
@@ -368,7 +377,7 @@ public function getOrderStatuses() {
 
 public function getOrdersByStatus($status) {
     try {
-        return $this->select("SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC", [$status]);
+        return $this->select("SELECT * FROM orders WHERE order_status = ? ORDER BY o_created_at DESC", [$status]);
     } catch (Exception $e) {
         error_log("Get orders by status error: " . $e->getMessage());
         return [];
@@ -378,17 +387,19 @@ public function getOrdersByStatus($status) {
 public function getOrderStats() {
     try {
         $stats = [];
-        $statuses = array_keys($this->getOrderStatuses());
-        
+        $statuses = array_keys($this->getOrderStatuses()); 
+
         foreach ($statuses as $status) {
-            $count = $this->fetch("SELECT COUNT(*) as count FROM orders WHERE status = ?", [$status]);
-            $stats[$status] = $count['count'] ?? 0;
+            $row = $this->fetch("SELECT COUNT(order_id) AS order_count FROM orders WHERE order_status = ?",[$status]);
+            $stats[$status] = $row['order_count'] ?? 0;
         }
-        
-        $total = $this->fetch("SELECT COUNT(*) as total, SUM(total_amount) as revenue FROM orders");
-        $stats['total_orders'] = $total['total'] ?? 0;
-        $stats['total_revenue'] = $total['revenue'] ?? 0;
-        
+
+        // overall stats
+        $row = $this->fetch("SELECT COUNT(order_id) AS total_orders, SUM(total_amount) AS total_revenue FROM orders");
+
+        $stats['total_orders'] = $row['total_orders'] ?? 0;
+        $stats['total_revenue'] = $row['total_revenue'] ?? 0;
+
         return $stats;
     } catch (Exception $e) {
         error_log("Get order stats error: " . $e->getMessage());
@@ -396,22 +407,27 @@ public function getOrderStats() {
     }
 }
 
+
 public function searchOrders($search_term) {
     try {
         $search = "%{$search_term}%";
         return $this->select(
-            "SELECT * FROM orders WHERE 
-             customer_name LIKE ? OR 
-             email LIKE ? OR 
-             id LIKE ? 
-             ORDER BY created_at DESC",
-            [$search, $search, $search]
+            "SELECT o.order_id, o.status, o.total_amount, o.created_at, c.firstname, c.lastname, c.email
+             FROM orders o
+             JOIN customers c ON o.customer_id = c.customer_id
+             WHERE c.firstname LIKE ? 
+                OR c.lastname LIKE ?
+                OR c.email LIKE ?
+                OR o.order_id LIKE ?
+             ORDER BY o.created_at DESC",
+            [$search, $search, $search, $search]
         );
     } catch (Exception $e) {
-        error_log("Search orders error: " . $e->getMessage());
+        error_log('Search orders error: ' . $e->getMessage());
         return [];
     }
 }
+
 
 
    // =================================================================
@@ -428,7 +444,7 @@ public function getCustomerOrders($customer_id = null, $limit = null, $offset = 
             return [];
         }
         
-        $sql = "SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC";
+        $sql = "SELECT * FROM orders WHERE customer_id = ? ORDER BY o_created_at DESC";
         $params = [$customer_id];
         
         if ($limit) {
@@ -456,7 +472,7 @@ public function getCustomerOrder($orderId, $customer_id = null) {
         }
         
         $order = $this->fetch(
-            "SELECT * FROM orders WHERE id = ? AND customer_id = ? LIMIT 1",
+            "SELECT * FROM orders WHERE order_id = ? AND customer_id = ? LIMIT 1",
             [$orderId, $customer_id]
         );
 
@@ -465,10 +481,10 @@ public function getCustomerOrder($orderId, $customer_id = null) {
         }
 
         // Format fields for UI
-        $order['formatted_status'] = $this->formatOrderStatus($order['status']);
-        $order['status_class']     = $this->getOrderStatusClass($order['status']);
+        $order['formatted_status'] = $this->formatOrderStatus($order['order_status']);
+        $order['status_class']     = $this->getOrderStatusClass($order['order_status']);
         $order['formatted_total']  = $this->formatPrice($order['total_amount']);
-        $order['formatted_date']   = $this->formatOrderDate($order['created_at']);
+        $order['formatted_date']   = $this->formatOrderDate($order['o_created_at']);
 
         return $order;
         
@@ -486,11 +502,11 @@ public function getCustomerOrderItems($orderId, $customer_id = null) {
         }
         
         return $this->select(
-            "SELECT oi.*, p.image, p.name 
+            "SELECT oi.order_item_id, oi.order_id, oi.perfume_id, oi.order_quantity, oi.order_price
              FROM order_items oi 
-             LEFT JOIN perfumes p ON oi.product_id = p.id 
+             LEFT JOIN perfumes p ON oi.perfume_id = p.perfume_id 
              WHERE oi.order_id = ? 
-             ORDER BY oi.id",
+             ORDER BY oi.order_item_id",
             [$orderId]
         );
         
@@ -514,9 +530,9 @@ public function getCustomerOrdersCount($customer_id = null) {
             "SELECT COUNT(*) as total FROM orders WHERE customer_id = ?",
             [$customer_id]
         );
-        
-        return $result ? (int)$result['total'] : 0;
-        
+
+        return $result ? (int)$result['total_amount'] : 0;
+
     } catch (Exception $e) {
         error_log("Get customer orders count error: " . $e->getMessage());
         return 0;
@@ -600,7 +616,7 @@ public function formatOrderDate($date) {
             }
             
             // Validate required fields
-            $requiredFields = ['firstname', 'lastname', 'username'];
+            $requiredFields = ['customer_firstname', 'customer_lastname', 'customer_username'];
             foreach ($requiredFields as $field) {
                 if (empty(trim($data[$field] ?? ''))) {
                     return ['success' => false, 'message' => ucfirst($field) . ' is required.'];
@@ -608,14 +624,14 @@ public function formatOrderDate($date) {
             }
             
             // Validate email format
-            if (!filter_var($data['username'], FILTER_VALIDATE_EMAIL)) {
+            if (!filter_var($data['customer_username'], FILTER_VALIDATE_EMAIL)) {
                 return ['success' => false, 'message' => 'Please enter a valid email address.'];
             }
             
             // Check if username is taken by another user
             $existing = $this->fetch(
-                "SELECT id FROM users WHERE username = ? AND id != ? LIMIT 1",
-                [$data['username'], $customer_id]
+                "SELECT customer_id FROM customers WHERE customer_username = ? AND customer_id != ? LIMIT 1",
+                [$data['customer_username'], $customer_id]
             );
             
             if ($existing) {
@@ -624,11 +640,11 @@ public function formatOrderDate($date) {
             
             // Update profile
             $rowsAffected = $this->update(
-                "UPDATE users SET firstname = ?, lastname = ?, username = ? WHERE id = ? AND role = 'customer'",
+                "UPDATE customers SET customer_firstname = ?, customer_lastname = ?, customer_username = ? WHERE customer_id = ?",
                 [
-                    trim($data['firstname']),
-                    trim($data['lastname']),
-                    trim($data['username']),
+                    trim($data['customer_firstname']),
+                    trim($data['customer_lastname']),
+                    trim($data['customer_username']),
                     $customer_id
                 ]
             );
@@ -636,8 +652,8 @@ public function formatOrderDate($date) {
             if ($rowsAffected > 0) {
                 // Update session data if it's current user
                 if ($customer_id == $this->getCurrentCustomerId()) {
-                    $_SESSION['customer_username'] = $data['username'];
-                    $_SESSION['customer_name'] = $data['firstname'] . ' ' . $data['lastname'];
+                    $_SESSION['customer_username'] = $data['customer_username'];
+                    $_SESSION['customer_name'] = $data['customer_firstname'] . ' ' . $data['customer_lastname'];
                 }
                 
                 return ['success' => true, 'message' => 'Profile updated successfully!'];
@@ -677,18 +693,18 @@ public function formatOrderDate($date) {
             
             // Verify current password
             $customer = $this->fetch(
-                "SELECT password FROM users WHERE id = ? AND role = 'customer' LIMIT 1",
+                "SELECT customer_password FROM customers WHERE customer_id = ? LIMIT 1",
                 [$customer_id]
             );
             
-            if (!$customer || !password_verify($currentPassword, $customer['password'])) {
+            if (!$customer || !password_verify($currentPassword, $customer['customer_password'])) {
                 return ['success' => false, 'message' => 'Current password is incorrect.'];
             }
             
             // Update password
             $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
             $rowsAffected = $this->update(
-                "UPDATE users SET password = ? WHERE id = ? AND role = 'customer'",
+                "UPDATE customers SET customer_password = ? WHERE customer_id = ?",
                 [$hashedPassword, $customer_id]
             );
             
@@ -714,8 +730,8 @@ public function formatOrderDate($date) {
     
     public function getProductsCount() {
         try {
-            $result = $this->fetch("SELECT COUNT(*) as cnt FROM perfumes");
-            return $result ? (int)$result['cnt'] : 0;
+            $result = $this->fetch("SELECT COUNT(perfume_id) as total FROM perfumes");
+            return $result ? (int)$result['total'] : 0;
         } catch (Exception $e) {
             return 0;
         }
@@ -723,9 +739,9 @@ public function formatOrderDate($date) {
     
     public function getUsersCount() {
         try {
-            $tableExists = $this->fetch("SHOW TABLES LIKE 'users'");
+            $tableExists = $this->fetch("SHOW TABLES LIKE 'customers'");
             if ($tableExists) {
-                $result = $this->fetch("SELECT COUNT(*) as cnt FROM users");
+                $result = $this->fetch("SELECT COUNT(*) as cnt FROM customers");
                 return $result ? (int)$result['cnt'] : 0;
             }
         } catch (Exception $e) {
@@ -782,90 +798,64 @@ public function formatOrderDate($date) {
     // =================================================================
     
     public function getProductById($id) {
-        return $this->fetch("SELECT * FROM perfumes WHERE id = ?", [$id]);
+        return $this->fetch("SELECT * FROM perfumes WHERE perfume_id = ?", [$id]);
     }
-    public function getPerfumes($gender_filter = null, $search_query = null) {
+    public function getPerfumes($sex_filter = null, $search_query = null) {
         $sql = "SELECT * FROM perfumes WHERE 1";
         $params = [];
 
-        if ($gender_filter === 'Male' || $gender_filter === 'Female') {
-            $sql .= " AND gender = ?";
-            $params[] = $gender_filter;
+        if ($sex_filter === 'Male' || $sex_filter === 'Female') {
+            $sql .= " AND sex = ?";
+            $params[] = $sex_filter;
         }
 
         if (!empty($search_query)) {
-            $sql .= " AND (name LIKE ? OR description LIKE ? OR price LIKE ?)";
+            $sql .= " AND (perfume_name LIKE ? OR perfume_descr LIKE ? OR perfume_price LIKE ?)";
             $search_like = "%" . $search_query . "%";
             $params[] = $search_like;
             $params[] = $search_like;
             $params[] = $search_like;
         }
 
+        //tanggalin if may error
+        $sql .= " ORDER BY perfume_id DESC"; //sort by latest perfume
+
         return $this->select($sql, $params);
     }
     
     public function addProduct($data, $files) {
-        $name = $data['name'];
-        $brand = $data['brand'];
-        $price = $data['price'];
-        $gender = $data['gender'];
+        $name = $data['perfume_name'];
+        $brand = $data['perfume_brand'];
+        $price = $data['perfume_price'];
+        $sex = $data['sex'];
         $stock = $data['stock'] ?? 0;
-        $description = $data['description'] ?? '';
-        $ml_size = $data['ml_size'] ?? '';
-
-        // Handle image uploads
-        $image = $this->handleImageUpload($files, 'image');
-        $image2 = $this->handleImageUpload($files, 'image2');
+        $description = $data['perfume_desc'] ?? '';
+        $perfume_ml = $data['perfume_ml'] ?? '';
+        $scent_family = $data['scent_family'] ?? '';
+        $admin_id = $data['admin_id'] ?? null;
 
         return $this->insert(
-            "INSERT INTO perfumes (name, brand, price, gender, image, image2, description, stock, ml_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-            [$name, $brand, $price, $gender, $image, $image2, $description, $stock, $ml_size]
+            "INSERT INTO perfumes (admin_id, perfume_name, perfume_brand, perfume_price, perfume_ml, sex, perfume_desc, stock, scent_family, p_created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+            [$admin_id, $name, $brand, $price, $perfume_ml, $sex, $description, $stock, $scent_family]
         );
     }
     
     public function updateProduct($data, $files) {
-        $id = intval($data['id']);
-        $name = $data['name'];
-        $brand = $data['brand'];
-        $price = $data['price'];
-        $gender = $data['gender'];
+        $id = intval($data['perfume_id']);
+        $name = $data['perfume_name'];
+        $brand = $data['perfume_brand'];
+        $price = $data['perfume_price'];
+        $sex = $data['sex'];
         $stock = $data['stock'];
-        $description = $data['description'];
-        $ml_size = $data['ml_size'];
+        $description = $data['perfume_desc'];
+        $perfume_ml = $data['perfume_ml'];
+        $scent_family = $data['scent_family'] ?? '';
 
-        $params = [$name, $brand, $price, $gender, $stock, $description, $ml_size];
-        $updateQuery = "UPDATE perfumes SET name = ?, brand = ?, price = ?, gender = ?, stock = ?, description = ?, ml_size = ?";
-
-        // Handle image updates
-        $newImage = $this->handleImageUpload($files, 'image');
-        if ($newImage) {
-            $updateQuery .= ", image = ?";
-            $params[] = $newImage;
-        }
-        
-        $newImage2 = $this->handleImageUpload($files, 'image2');
-        if ($newImage2) {
-            $updateQuery .= ", image2 = ?";
-            $params[] = $newImage2;
-        }
-
-        $updateQuery .= " WHERE id = ?";
-        $params[] = $id;
+        $params = [$name, $brand, $price, $sex, $stock, $description, $perfume_ml, $scent_family];
+        $updateQuery = "UPDATE perfumes SET perfume_name = ?, perfume_brand = ?, perfume_price = ?, sex = ?, stock = ?, perfume_desc = ?, perfume_ml = ?, scent_family = ? WHERE perfume_id";
 
         return $this->update($updateQuery, $params);
-    }
-    
-    // Helper method for image uploads
-    private function handleImageUpload($files, $fieldName) {
-        if (!empty($files[$fieldName]['name']) && $files[$fieldName]['error'] === UPLOAD_ERR_OK) {
-            $fileName = time() . '_' . basename($files[$fieldName]['name']);
-            $uploadPath = "images/" . $fileName;
-            
-            if (move_uploaded_file($files[$fieldName]['tmp_name'], $uploadPath)) {
-                return $fileName;
-            }
-        }
-        return null;
     }
 
     // =================================================================
@@ -879,17 +869,16 @@ public function formatOrderDate($date) {
         return $_SESSION['cart'];
     }
 
-    public function addToCart($id, $name, $price, $image, $qty = 1) {
+    public function addToCart($perfume_id, $perfume_name, $perfume_price, $qty = 1) {
         $qty = max(1, (int)$qty);
 
-        if (isset($_SESSION['cart'][$id])) {
-            $_SESSION['cart'][$id]['quantity'] += $qty;
+        if (isset($_SESSION['cart'][$perfume_id])) {
+            $_SESSION['cart'][$perfume_id]['perfume_quantity'] += $qty;
         } else {
-            $_SESSION['cart'][$id] = [
-                'name' => $name,
-                'price' => (float)$price,
-                'image' => $image,
-                'quantity' => $qty,
+            $_SESSION['cart'][$perfume_id] = [
+                'perfume_name' => $perfume_name,
+                'perfume_price' => (float)$perfume_price,
+                'perfume_quantity' => $qty,
             ];
         }
     }
@@ -897,7 +886,14 @@ public function formatOrderDate($date) {
     public function updateCartQuantity($id, $qty) {
         $qty = max(1, (int)$qty);
         if (isset($_SESSION['cart'][$id])) {
-            $_SESSION['cart'][$id]['quantity'] = $qty;
+            $_SESSION['cart'][$id]['perfume_quantity'] = $qty;
+        }
+    }
+
+    public function updateCartQuantity($id, $qty) {
+        $qty = max(1, (int)$qty);
+        if (isset($_SESSION['cart'][$id])) {
+            $_SESSION['cart'][$id]['perfume_quantity'] = $qty;
         }
     }
 
@@ -919,7 +915,7 @@ public function formatOrderDate($date) {
         $cart = $this->getCart();
         $grandTotal = 0;
         foreach ($cart as $item) {
-            $grandTotal += $item['price'] * $item['quantity'];
+            $grandTotal += $item['perfume_price'] * $item['perfume_quantity'];
         }
         return $grandTotal;
     }
@@ -936,28 +932,28 @@ public function formatOrderDate($date) {
     // ORDER MANAGEMENT METHODS
     // =================================================================
     
-    public function createOrder($customerData, $cartItems, $totalAmount) {
+    public function createOrder($customerId, $cartItems, $totalAmount, $paymentMethod, $gcashProof = null) {
         try {
             // Start transaction
             $this->connection->beginTransaction();
             
             // Insert order
             $orderId = $this->insert(
-                "INSERT INTO orders (customer_name, customer_email, customer_phone, customer_address, total_amount, order_date, status) VALUES (?, ?, ?, ?, ?, NOW(), 'pending')",
-                [$customerData['name'], $customerData['email'], $customerData['phone'], $customerData['address'], $totalAmount]
+                "INSERT INTO orders (customer_id, payment_method, total_amount, gcash_proof, order_status, o_created_at) VALUES (?, ?, ?, ?, 'pending', NOW())",
+                [$customerId, $paymentMethod, $totalAmount, $gcashProof]
             );
             
             // Insert order items
-            foreach ($cartItems as $productId => $item) {
+            foreach ($cartItems as $perfumeId => $item) {
                 $this->insert(
-                    "INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)",
-                    [$orderId, $productId, $item['name'], $item['price'], $item['quantity'], ($item['price'] * $item['quantity'])]
+                    "INSERT INTO order_items (order_id, perfume_id, order_quantity, order_price) VALUES (?, ?, ?, ?)",
+                    [$orderId, $perfumeId, $item['order_quantity'], $item['order_price']]
                 );
                 
                 // Update stock
                 $this->update(
-                    "UPDATE perfumes SET stock = stock - ? WHERE id = ?",
-                    [$item['quantity'], $productId]
+                    "UPDATE perfumes SET perfume_stock = perfume_stock - ? WHERE id = ?",
+                    [$item['order_quantity'], $perfumeId]
                 );
             }
             
@@ -980,25 +976,25 @@ public function formatOrderDate($date) {
         $errors = [];
         
         // Required fields
-        $required = ['name', 'email', 'street', 'city', 'province', 'postal', 'payment'];
+        $required = ['customer_firstname', 'customer_lastname', 'customer_email', 'street', 'city', 'province', 'postal_code', 'payment_method'];
         foreach ($required as $field) {
             if (empty(trim($data[$field] ?? ''))) {
-                $errors[] = ucfirst($field) . " is required.";
+                $errors[] = ucfirst(str_replace('_', ' ', $field)) . " is required.";
             }
         }
         
         // Email validation
-        if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+        if (!empty($data['customer_email']) && !filter_var($data['customer_email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = "Please enter a valid email address.";
         }
         
         // Payment method validation
-        if (!in_array($data['payment'] ?? '', ['cod', 'gcash'])) {
+        if (!in_array($data['payment_method'] ?? '', ['cod', 'gcash'])) {
             $errors[] = "Please select a valid payment method.";
         }
         
         // GCash validation
-        if (($data['payment'] ?? '') === 'gcash') {
+        if (($data['payment_method'] ?? '') === 'gcash') {
             if (empty($_FILES['gcash_ref']['name'])) {
                 $errors[] = "Please upload proof of payment for GCash.";
             } elseif ($_FILES['gcash_ref']['error'] !== UPLOAD_ERR_OK) {
@@ -1009,6 +1005,7 @@ public function formatOrderDate($date) {
         return $errors;
     }
     
+    //hindi pa din okay
     public function processCheckout($data, $files) {
         // Validate cart is not empty
         if ($this->isCartEmpty()) {
@@ -1027,7 +1024,7 @@ public function formatOrderDate($date) {
         
         // Handle GCash proof upload
         $proofFileName = null;
-        if ($data['payment'] === 'gcash' && !empty($files['gcash_ref']['name'])) {
+        if ($data['payment_method'] === 'gcash' && !empty($files['gcash_ref']['name'])) {
             $proofFileName = $this->handleProofUpload($files['gcash_ref']);
         }
         
@@ -1052,11 +1049,13 @@ public function formatOrderDate($date) {
     
     private function formatAddress($data) {
         return trim($data['street']) . ', ' . 
+               trim($data['barangay']) . ', ' .
                trim($data['city']) . ', ' . 
                trim($data['province']) . ' ' . 
-               trim($data['postal']);
+               trim($data['postal_code']);
     }
     
+    //images for proof of payment
     private function handleProofUpload($file) {
         $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
         $maxSize = 5 * 1024 * 1024; // 5MB
@@ -1084,42 +1083,34 @@ public function formatOrderDate($date) {
         }
     }
     
-    private function createOrderWithDetails($customerData, $cartItems, $totalAmount) {
+    private function createOrderWithDetails($customerId, $cartItems, $totalAmount, $paymentMethod, $gcashProof = null) {
         try {
             // Start transaction
             $this->connection->beginTransaction();
             
             // Insert order with additional fields
             $orderId = $this->insert(
-                "INSERT INTO orders (customer_name, customer_email, customer_phone, customer_address, total_amount, payment_method, proof_of_payment, order_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'pending')",
-                [
-                    $customerData['name'],
-                    $customerData['email'], 
-                    $customerData['phone'],
-                    $customerData['address'],
-                    $totalAmount,
-                    $customerData['payment_method'],
-                    $customerData['proof_of_payment']
-                ]
+                "INSERT INTO orders (customer_id, payment_method, total_amount, gcash_proof, order_status, o_created_at) VALUES (?, ?, ?, ?, 'pending', NOW())",
+                [$customerId, $paymentMethod, $totalAmount, $gcashProof]
             );
             
             // Insert order items and update stock
-            foreach ($cartItems as $productId => $item) {
+            foreach ($cartItems as $perfumeId => $item) {
                 // Check if enough stock available
-                $product = $this->getProductById($productId);
-                if (!$product || $product['stock'] < $item['quantity']) {
-                    throw new Exception("Insufficient stock for " . $item['name']);
+                $product = $this->getProductById($perfumeId);
+                if (!$product || $product['perfume_stock'] < $item['order_quantity']) {
+                    throw new Exception("Insufficient stock for " . $item['perfume_name']);
                 }
-                
+            
+                //insert sa oi
                 $this->insert(
-                    "INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)",
-                    [$orderId, $productId, $item['name'], $item['price'], $item['quantity'], ($item['price'] * $item['quantity'])]
+                    "INSERT INTO order_items (order_id, perfume_id, order_quantity, order_price) VALUES (?, ?, ?, ?)",
+                    [$orderId, $perfumeId, $item['order_quantity'], $item['order_price']]
                 );
                 
-                // Update stock
                 $this->update(
-                    "UPDATE perfumes SET stock = stock - ? WHERE id = ?",
-                    [$item['quantity'], $productId]
+                    "UPDATE perfumes SET perfume_stock = perfume_stock - ? WHERE perfume_id = ?",
+                    [$item['order_quantity'], $perfumeId]
                 );
             }
             
@@ -1135,18 +1126,19 @@ public function formatOrderDate($date) {
     }
     
     public function isUserLoggedIn() {
-        return isset($_SESSION['customer_id']) || isset($_SESSION['user_id']);
+        return isset($_SESSION['customer_id']) || isset($_SESSION['admin_id']);
     }
     
     public function getCheckoutSummary() {
         if ($this->isCartEmpty()) {
             return null;
         }
+        $cartItems = $_SESSION['cart'];
         
         return [
-            'items' => $this->getCartItems(),
+            'items' => $cartItems,
             'total' => $this->calculateGrandTotal(),
-            'item_count' => array_sum(array_column($this->getCartItems(), 'quantity'))
+            'item_count' => array_sum(array_column($cartItems, 'perfume_quantity'))
         ];
     }
 }

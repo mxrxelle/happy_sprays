@@ -2,7 +2,7 @@
 session_start();
 
 // kung hindi naka-login, redirect
-if (!isset($_SESSION['user_id'])) {
+if (!isset($_SESSION['admin_id'])) {
     header("Location: login.php");
     exit;
 }
@@ -129,7 +129,7 @@ $totalProducts = $db->getProductsCount();
 <body>
     <header>
         <h1>Happy Sprays Admin Dashboard</h1>
-        <p>Welcome, <?= htmlspecialchars($_SESSION['username']) ?> | <a href="logout.php">Logout</a></p>
+        <p>Welcome, <?= htmlspecialchars($_SESSION['admin_username']) ?> | <a href="logout.php">Logout</a></p>
     </header>
 
     <div class="container">
